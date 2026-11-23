@@ -1,0 +1,5 @@
+{
+  "key.snaptap.toggle": "Toggle SnapTap (SOCD)",
+  "msg.snaptap.enabled": "SnapTap: ON",
+  "msg.snaptap.disabled": "SnapTap: OFF"
+}

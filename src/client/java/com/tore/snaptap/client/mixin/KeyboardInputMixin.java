@@ -1,56 +1,65 @@
 package com.tore.snaptap.client.mixin;
 
+import com.tore.snaptap.client.SocdHandler;
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.KeyboardInput;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.phys.Vec2;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+/**
+ * Thin bridge between vanilla keyboard input and {@link SocdHandler}.
+ *
+ * <p>Since Minecraft 1.21.2/26.x {@code KeyboardInput} no longer exposes the mutable
+ * {@code forwardImpulse}/{@code leftImpulse} floats. Its {@code tick()} builds an immutable
+ * {@link Input} record and a normalised {@link Vec2} called {@code moveVector}. This mixin therefore
+ * lets vanilla build both fields and then immediately rewrites them with the SOCD-resolved values.</p>
+ */
 @Mixin(KeyboardInput.class)
 public abstract class KeyboardInputMixin extends ClientInput {
-    @Unique private boolean snaptap$wasLeft, snaptap$wasRight;
-    @Unique private boolean snaptap$wasForward, snaptap$wasBackward;
-    @Unique private int snaptap$lastHorizontal = 0; // -1 = links, 1 = rechts
-    @Unique private int snaptap$lastVertical = 0;   //  1 = vorwärts, -1 = rückwärts
 
     @Inject(method = "tick", at = @At("TAIL"))
-    private void snaptap$apply(CallbackInfo ci) {
-        Input in = this.keyPresses;
-
-        // Steigende Flanke: welche Taste wurde zuletzt NEU gedrückt?
-        if (in.left() && !snaptap$wasLeft) snaptap$lastHorizontal = -1;
-        if (in.right() && !snaptap$wasRight) snaptap$lastHorizontal = 1;
-        if (in.forward() && !snaptap$wasForward) snaptap$lastVertical = 1;
-        if (in.backward() && !snaptap$wasBackward) snaptap$lastVertical = -1;
-
-        boolean left = in.left(), right = in.right();
-        boolean forward = in.forward(), backward = in.backward();
-
-        if (left && right) {
-            left = (snaptap$lastHorizontal == -1);
-            right = !left;
-        }
-        if (forward && backward) {
-            forward = (snaptap$lastVertical == 1);
-            backward = !forward;
+    private void snaptap$applySocd(CallbackInfo ci) {
+        if (!SocdHandler.isEnabled()) {
+            return;
         }
 
-        if (left != in.left() || right != in.right()
-                || forward != in.forward() || backward != in.backward()) {
-            this.keyPresses = new Input(forward, backward, left, right,
-                    in.jump(), in.shift(), in.sprint());
-            float fwdImpulse  = forward == backward ? 0.0f : (forward ? 1.0f : -1.0f);
-            float leftImpulse = left == right       ? 0.0f : (left    ? 1.0f : -1.0f);
-            this.moveVector = new Vec2(leftImpulse, fwdImpulse);
+        // keyPresses/moveVector are inherited from ClientInput, which this mixin extends so that
+        // the protected moveVector field can be written directly.
+        Input pressed = this.keyPresses;
+
+        boolean forward = pressed.forward();
+        boolean backward = pressed.backward();
+        boolean left = pressed.left();
+        boolean right = pressed.right();
+
+        float vertical = SocdHandler.resolveVertical(forward, backward);
+        float horizontal = SocdHandler.resolveHorizontal(left, right);
+
+        // resolveVertical(): +1 = forward, -1 = backward; resolveHorizontal(): -1 = left, +1 = right.
+        boolean resolvedForward = vertical > 0.0F;
+        boolean resolvedBackward = vertical < 0.0F;
+        boolean resolvedLeft = horizontal < 0.0F;
+        boolean resolvedRight = horizontal > 0.0F;
+
+        if (resolvedForward != forward || resolvedBackward != backward
+                || resolvedLeft != left || resolvedRight != right) {
+            this.keyPresses = new Input(
+                    resolvedForward,
+                    resolvedBackward,
+                    resolvedLeft,
+                    resolvedRight,
+                    pressed.jump(),
+                    pressed.shift(),
+                    pressed.sprint()
+            );
         }
 
-        snaptap$wasLeft = in.left();
-        snaptap$wasRight = in.right();
-        snaptap$wasForward = in.forward();
-        snaptap$wasBackward = in.backward();
+        // In this Minecraft version Vec2.x is the left impulse and Vec2.y the forward impulse,
+        // both positive along their axis; vanilla normalises the vector, so we do the same.
+        this.moveVector = new Vec2(-horizontal, vertical).normalized();
     }
 }

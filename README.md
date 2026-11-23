@@ -1,5 +1,10 @@
-# Snaptap
-This is a mod that takes the Razer SnapTap feature and makes it work in Minecraft Nothing more to say hahaha
-## License
+# SnapTap for Minecraft
 
-This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
+Client-side Fabric mod implementing SOCD (Simultaneous Opposite Cardinal Direction) input handling with last-input priority for Minecraft.
+
+## Features
+- Last-input priority on horizontal (`left` / `right`) and vertical (`forward` / `backward`) movement axes
+- Toggle keybind to enable or disable input override during gameplay (`en_us` & `de_de` localization)
+
+## Notes
+- Client-side only. Check server rules and anti-cheat policies before using input modifiers in multiplayer.
